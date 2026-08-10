@@ -1,0 +1,18 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"WWW",
+		"WRW",
+		"III"
+	],
+	"key": {
+		"I": "minecraft:iron_ingot",
+		"W": "minecraft:white_wool",
+		"R": "minecraft:redstone"
+	},
+	"result": {
+		"id": "pixelreel:cinema_screen",
+		"count": 1
+	}
+}

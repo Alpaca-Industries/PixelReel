@@ -1,0 +1,18 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"III",
+		"IGI",
+		"IRI"
+	],
+	"key": {
+		"I": "minecraft:iron_ingot",
+		"G": "minecraft:glass",
+		"R": "minecraft:redstone"
+	},
+	"result": {
+		"id": "pixelreel:compact_television",
+		"count": 1
+	}
+}
