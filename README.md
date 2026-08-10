@@ -198,3 +198,40 @@ Most screen actions use these commands
 Display state (type, power, channel/media, facing, volume, playback position) is **server-auth** and synced to every client, including players who join later.
 
 Each client decodes the stream locally with its own VLC. Credentials are never stored in world data
+
+## Roadmap
+
+### What we have **Now**
+
+What already works in this snapshot build — crossed out as complete:
+
+- [x] ~~Fabric mod targeting Minecraft **26.3-snapshot-5**~~
+- [x] ~~Five display sizes (Compact TV, Wall TV, Ultrawide, Cinema, Curved Cinema)~~
+- [x] ~~Live TV via Tunarr / M3U + XMLTV guide~~
+- [x] ~~Jellyfin, Emby, and Plex integration~~
+- [x] ~~In-game provider config GUIs (Tunarr, Jellyfin, Emby, Plex)~~
+- [x] ~~Poster-based movie & TV browse UI~~
+- [x] ~~Playback controls (power, pause/resume, volume, channel/media select)~~
+- [x] ~~`/tv` command suite for screen control & diagnostics~~
+- [x] ~~Server-authoritative multiplayer sync (late-join included)~~
+- [x] ~~Client-side VLC decode with positional audio~~
+- [x] ~~Subtitles, letterboxing, and HDR tone mapping~~
+- [x] ~~Pixel Glasses fullscreen overlay~~
+- [x] ~~Craftable displays + creative tab~~
+
+### Upcoming
+
+| Feature | Status | Priority | Notes |
+| ------- | ------ | -------- | ----- |
+| **Admin remote control** | Planned | High | Item or GUI usable from anywhere (not only at the screen). Admins can start, pause, rewind/seek, pick content, and open config for any display. |
+| **Personalized screens** | Planned | High | Per-player private viewing — each player can have their own channel/title on a shared or personal display without forcing everyone onto the same stream. |
+| **Movie scheduler** | Planned | Medium | Queue showtimes (date/time + title or channel). Auto power-on, start playback, and optional lobby announcements for cinema nights. |
+| **YouTube / streaming integration** | Planned | Medium | Play YouTube (and possibly other stream sources) on displays alongside Tunarr and media servers. Exact providers TBD. |
+| **Posters as paintings** | Planned | Medium | Place movie/show posters in the world as painting-style decor (from library artwork), not only inside the browse menus. |
+| **Fabric on stable versions** | Planned | High | Port from `26.3-snapshot-5` to older/stable Fabric targets such as **1.21.1** and **1.20.1**. |
+| **NeoForge support** | Planned | High | First-class NeoForge build so servers/clients on NeoForge can run pixelReel. |
+| **Forge support** | Planned | Medium | Forge port after (or alongside) NeoForge, depending on version demand. |
+
+Ideas and PRs welcome — especially for loaders, version ports, and the admin remote.
+
+
