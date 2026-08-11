@@ -232,6 +232,8 @@ What already works in this snapshot build — crossed out as complete:
 | **NeoForge support** | Planned | High | First-class NeoForge build so servers/clients on NeoForge can run pixelReel. |
 | **Forge support** | Planned | Medium | Forge port after (or alongside) NeoForge, depending on version demand. |
 
+DISCORD: https://discord.gg/RSWQuEnMj
+
 Ideas and PRs welcome — especially for loaders, version ports, and the admin remote.
 
 
