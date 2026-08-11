@@ -218,6 +218,7 @@ What already works in this snapshot build — crossed out as complete:
 - [x] ~~Subtitles, letterboxing, and HDR tone mapping~~
 - [x] ~~Pixel Glasses fullscreen overlay~~
 - [x] ~~Craftable displays + creative tab~~
+- [x] Fabric mod targeting Minecraft **1.21.1**
 
 ### Upcoming
 
