@@ -229,11 +229,12 @@ What already works in this snapshot build — crossed out as complete:
 | **Movie scheduler** | Planned | Medium | Queue showtimes (date/time + title or channel). Auto power-on, start playback, and optional lobby announcements for cinema nights. |
 | **YouTube / streaming integration** | Planned | Medium | Play YouTube (and possibly other stream sources) on displays alongside Tunarr and media servers. Exact providers TBD. |
 | **Posters as paintings** | Planned | Medium | Place movie/show posters in the world as painting-style decor (from library artwork), not only inside the browse menus. |
-| **Fabric on stable versions** | Planned | High | Port from `26.3-snapshot-5` to older/stable Fabric targets such as **1.21.1** and **1.20.1**. |
+| **Fabric on stable versions** | Planned | High | Port from `26.3-snapshot-5` to older/stable Fabric target **1.20.1**. |
 | **NeoForge support** | Planned | High | First-class NeoForge build so servers/clients on NeoForge can run pixelReel. |
 | **Forge support** | Planned | Medium | Forge port after (or alongside) NeoForge, depending on version demand. |
 
 DISCORD: https://discord.gg/RSWQuEnMj
+Mincraft Mod 1.21.1: https://github.com/Samarth-programming/PixelReel_1.21.1
 
 Ideas and PRs welcome — especially for loaders, version ports, and the admin remote.
 
