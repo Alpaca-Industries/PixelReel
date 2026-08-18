@@ -2,6 +2,7 @@ package com.pixelreel.permissions;
 
 import com.pixelreel.config.ConfigManager;
 import com.pixelreel.config.PixelReelConfig;
+import com.pixelreel.networking.ScreenAction;
 import com.pixelreel.ondemand.OnDemandProvider;
 import java.util.Locale;
 import net.minecraft.commands.Commands;
@@ -85,6 +86,20 @@ public final class CinemaPermissions {
 
 	public static boolean canRefreshLibrary(ServerPlayer player) {
 		return allows(player, ConfigManager.get().permissionRefreshLibrary);
+	}
+
+	/** single source of truth for which permission gate a given screen action needs */
+	public static boolean mayControl(ServerPlayer player, ScreenAction action) {
+		return switch (action) {
+			case POWER_TOGGLE, POWER_ON, POWER_OFF, VOLUME_SET, CHANNEL_NEXT, CHANNEL_PREVIOUS -> canChangeContent(player)
+				|| canPlayTunarr(player);
+			case STOP -> canStop(player);
+			case RESUME, UNPAUSE, PAUSE, PAUSE_TOGGLE -> canPause(player);
+			case SEEK, SEEK_FORWARD, SEEK_BACKWARD, RESTART -> canSeek(player);
+			case PLAY_NEXT_NOW, CANCEL_NEXT, CYCLE_SUBTITLE, SELECT_SUBTITLE -> canChangeContent(player);
+			// Any nearby viewer may fill in duration once VLC discovers it (like ReportMediaEnded).
+			case REPORT_DURATION -> true;
+		};
 	}
 
 	public static boolean allows(ServerPlayer player, String rule) {

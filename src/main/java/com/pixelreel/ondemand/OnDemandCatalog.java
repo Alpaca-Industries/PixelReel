@@ -11,6 +11,7 @@ import com.pixelreel.jellyfin.JellyfinStatus;
 import com.pixelreel.media.SubtitleTrack;
 import com.pixelreel.networking.ModNetworkPayloads.BrowseKind;
 import com.pixelreel.plex.PlexService;
+import com.pixelreel.relay.StreamRelay;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -71,53 +72,65 @@ public final class OnDemandCatalog {
 				JellyfinService.Page p = kind == BrowseKind.SERIES
 					? JellyfinService.INSTANCE.pageSeries(search, page)
 					: JellyfinService.INSTANCE.pageMovies(search, page);
-				yield new Page(p.items(), p.page(), p.totalCount());
+				yield new Page(relayImages(p.items()), p.page(), p.totalCount());
 			}
 			case EMBY -> {
 				EmbyService.Page p = kind == BrowseKind.SERIES
 					? EmbyService.INSTANCE.pageSeries(search, page)
 					: EmbyService.INSTANCE.pageMovies(search, page);
-				yield new Page(p.items(), p.page(), p.totalCount());
+				yield new Page(relayImages(p.items()), p.page(), p.totalCount());
 			}
 			case PLEX -> {
 				PlexService.Page p = kind == BrowseKind.SERIES
 					? PlexService.INSTANCE.pageSeries(search, page)
 					: PlexService.INSTANCE.pageMovies(search, page);
-				yield new Page(p.items(), p.page(), p.totalCount());
+				yield new Page(relayImages(p.items()), p.page(), p.totalCount());
 			}
 		};
 	}
 
 	public static Optional<JellyfinItemSummary> find(OnDemandProvider provider, String itemId) {
-		return switch (provider) {
+		Optional<JellyfinItemSummary> found = switch (provider) {
 			case JELLYFIN -> JellyfinService.INSTANCE.find(itemId);
 			case EMBY -> EmbyService.INSTANCE.find(itemId);
 			case PLEX -> PlexService.INSTANCE.find(itemId);
 		};
+		return found.map(OnDemandCatalog::relayImage);
 	}
 
 	public static CompletableFuture<Optional<JellyfinItemSummary>> fetchItem(OnDemandProvider provider, String itemId) {
-		return switch (provider) {
+		CompletableFuture<Optional<JellyfinItemSummary>> future = switch (provider) {
 			case JELLYFIN -> JellyfinService.INSTANCE.fetchItem(itemId);
 			case EMBY -> EmbyService.INSTANCE.fetchItem(itemId);
 			case PLEX -> PlexService.INSTANCE.fetchItem(itemId);
 		};
+		return future.thenApply(opt -> opt.map(OnDemandCatalog::relayImage));
 	}
 
 	public static CompletableFuture<List<JellyfinItemSummary>> seasons(OnDemandProvider provider, String seriesId, boolean force) {
-		return switch (provider) {
+		CompletableFuture<List<JellyfinItemSummary>> future = switch (provider) {
 			case JELLYFIN -> JellyfinService.INSTANCE.seasons(seriesId, force);
 			case EMBY -> EmbyService.INSTANCE.seasons(seriesId, force);
 			case PLEX -> PlexService.INSTANCE.seasons(seriesId, force);
 		};
+		return future.thenApply(OnDemandCatalog::relayImages);
 	}
 
 	public static CompletableFuture<List<JellyfinItemSummary>> episodes(OnDemandProvider provider, String seasonId, boolean force) {
-		return switch (provider) {
+		CompletableFuture<List<JellyfinItemSummary>> future = switch (provider) {
 			case JELLYFIN -> JellyfinService.INSTANCE.episodes(seasonId, force);
 			case EMBY -> EmbyService.INSTANCE.episodes(seasonId, force);
 			case PLEX -> PlexService.INSTANCE.episodes(seasonId, force);
 		};
+		return future.thenApply(OnDemandCatalog::relayImages);
+	}
+
+	private static JellyfinItemSummary relayImage(JellyfinItemSummary item) {
+		return item.withImageUrl(StreamRelay.INSTANCE.relay(item.imageUrl()));
+	}
+
+	private static List<JellyfinItemSummary> relayImages(List<JellyfinItemSummary> items) {
+		return items.stream().map(OnDemandCatalog::relayImage).toList();
 	}
 
 	public static CompletableFuture<Optional<PlaybackStart>> resolvePlayback(
@@ -128,15 +141,15 @@ public final class OnDemandCatalog {
 		return switch (provider) {
 			case JELLYFIN -> JellyfinService.INSTANCE.resolvePlayback(itemId, startPositionMs)
 				.thenApply(opt -> opt.map(p -> new PlaybackStart(
-					p.streamUrl(), p.playSessionId(), p.mediaSourceId(), p.startPositionTicks(), p.hdr(), p.subtitles(), 0, 0, ""
+					StreamRelay.INSTANCE.relay(p.streamUrl()), p.playSessionId(), p.mediaSourceId(), p.startPositionTicks(), p.hdr(), p.subtitles(), 0, 0, ""
 				)));
 			case EMBY -> EmbyService.INSTANCE.resolvePlayback(itemId, startPositionMs)
 				.thenApply(opt -> opt.map(p -> new PlaybackStart(
-					p.streamUrl(), p.playSessionId(), p.mediaSourceId(), p.startPositionTicks(), p.hdr(), p.subtitles(), 0, 0, ""
+					StreamRelay.INSTANCE.relay(p.streamUrl()), p.playSessionId(), p.mediaSourceId(), p.startPositionTicks(), p.hdr(), p.subtitles(), 0, 0, ""
 				)));
 			case PLEX -> PlexService.INSTANCE.resolvePlayback(itemId, startPositionMs)
 				.thenApply(opt -> opt.map(p -> new PlaybackStart(
-					p.streamUrl(),
+					StreamRelay.INSTANCE.relay(p.streamUrl()),
 					p.playSessionId(),
 					p.mediaSourceId(),
 					p.startPositionTicks(),
@@ -158,7 +171,7 @@ public final class OnDemandCatalog {
 			return "";
 		}
 		try {
-			return switch (provider) {
+			String direct = switch (provider) {
 				case JELLYFIN -> JellyfinService.INSTANCE.buildSubtitleUrl(
 					display.getJellyfinItemId(), display.getJellyfinMediaSourceId(), subtitleIndex
 				);
@@ -167,6 +180,7 @@ public final class OnDemandCatalog {
 				);
 				case PLEX -> PlexService.INSTANCE.buildSubtitleUrl(subtitleIndex);
 			};
+			return StreamRelay.INSTANCE.relay(direct);
 		} catch (Exception e) {
 			return "";
 		}
@@ -181,7 +195,7 @@ public final class OnDemandCatalog {
 			return "";
 		}
 		try {
-			return switch (provider) {
+			String direct = switch (provider) {
 				case JELLYFIN -> JellyfinService.INSTANCE.buildStreamUrl(
 					display.getJellyfinItemId(),
 					display.getJellyfinMediaSourceId(),
@@ -204,6 +218,7 @@ public final class OnDemandCatalog {
 					display.currentPlaybackPositionMs()
 				);
 			};
+			return StreamRelay.INSTANCE.relay(direct);
 		} catch (Exception e) {
 			return "";
 		}

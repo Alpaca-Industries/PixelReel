@@ -13,6 +13,7 @@ public final class SubtitleParser {
 	private static final Pattern VTT_TIME = Pattern.compile(
 		"(?:(\\d{1,2}):)?(\\d{1,2}):(\\d{2})\\.(\\d{1,3})\\s*-->\\s*(?:(\\d{1,2}):)?(\\d{1,2}):(\\d{2})\\.(\\d{1,3})"
 	);
+	private static final int MAX_CUES = 20_000;
 
 	private SubtitleParser() {
 	}
@@ -35,6 +36,9 @@ public final class SubtitleParser {
 		String[] blocks = body.split("\\n\\s*\\n");
 		List<Cue> cues = new ArrayList<>();
 		for (String block : blocks) {
+			if (cues.size() >= MAX_CUES) {
+				break;
+			}
 			String[] lines = block.strip().split("\\n");
 			if (lines.length < 2) {
 				continue;
@@ -69,6 +73,9 @@ public final class SubtitleParser {
 		String[] blocks = body.split("\\n\\s*\\n");
 		List<Cue> cues = new ArrayList<>();
 		for (String block : blocks) {
+			if (cues.size() >= MAX_CUES) {
+				break;
+			}
 			String stripped = block.strip();
 			if (stripped.isEmpty() || stripped.regionMatches(true, 0, "WEBVTT", 0, 6) || stripped.startsWith("NOTE")) {
 				continue;

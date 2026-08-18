@@ -96,7 +96,7 @@ public final class ServerNetworking {
 			PixelReel.LOGGER.debug("Rejected screen control from {} at {}: no reachable display", player.getName().getString(), payload.pos().toShortString());
 			return;
 		}
-		if (!mayControl(player, payload.action())) {
+		if (!CinemaPermissions.mayControl(player, payload.action())) {
 			notify(player, payload.pos(), ScreenControllerLogic.Outcome.NO_PERMISSION);
 			return;
 		}
@@ -104,19 +104,6 @@ public final class ServerNetworking {
 			display, payload.action(), payload.value(), player.getGameProfile().name()
 		);
 		notify(player, payload.pos(), outcome);
-	}
-
-	private static boolean mayControl(ServerPlayer player, ScreenAction action) {
-		return switch (action) {
-			case POWER_TOGGLE, POWER_ON, POWER_OFF, VOLUME_SET, CHANNEL_NEXT, CHANNEL_PREVIOUS -> CinemaPermissions.canChangeContent(player)
-				|| CinemaPermissions.canPlayTunarr(player);
-			case STOP -> CinemaPermissions.canStop(player);
-			case RESUME, UNPAUSE, PAUSE, PAUSE_TOGGLE -> CinemaPermissions.canPause(player);
-			case SEEK, SEEK_FORWARD, SEEK_BACKWARD, RESTART -> CinemaPermissions.canSeek(player);
-			case PLAY_NEXT_NOW, CANCEL_NEXT, CYCLE_SUBTITLE, SELECT_SUBTITLE -> CinemaPermissions.canChangeContent(player);
-			// Any nearby viewer may fill in duration once VLC discovers it (like ReportMediaEnded).
-			case REPORT_DURATION -> true;
-		};
 	}
 
 	private static void handleTune(ModNetworkPayloads.ScreenTune payload, ServerPlayer player) {
@@ -286,6 +273,9 @@ public final class ServerNetworking {
 	private static void handleMediaEnded(ModNetworkPayloads.ReportMediaEnded payload, ServerPlayer player) {
 		DisplayBlockEntity display = ScreenControllerLogic.resolve(player, payload.pos());
 		if (display == null || display.getChannelEpoch() != payload.channelEpoch()) {
+			return;
+		}
+		if (!display.tryConsumeMediaEndedReport()) {
 			return;
 		}
 		ScreenControllerLogic.onMediaEnded(display);

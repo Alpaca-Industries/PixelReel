@@ -121,7 +121,7 @@ public final class JellyfinClient {
 			}
 			return firstEnabled;
 		} catch (Exception e) {
-			PixelReel.LOGGER.debug("Could not list Jellyfin users: {}", describeError(e));
+			PixelReel.LOGGER.debug("Could not list Jellyfin users: {}", sanitizeDetail(describeError(e)));
 			return "";
 		}
 	}

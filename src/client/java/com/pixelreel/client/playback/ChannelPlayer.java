@@ -317,13 +317,20 @@ public final class ChannelPlayer implements AutoCloseable {
 		if (factory == null) {
 			return null;
 		}
+		EmbeddedMediaPlayer created = null;
 		try {
-			EmbeddedMediaPlayer created = factory.mediaPlayers().newEmbeddedMediaPlayer();
+			created = factory.mediaPlayers().newEmbeddedMediaPlayer();
 			created.videoSurface().set(factory.videoSurfaces().newVideoSurface(new FrameFormatCallback(), new FrameRenderCallback(), true));
 			created.events().addMediaPlayerEventListener(new StreamEventListener());
 			this.player = created;
 			return created;
 		} catch (Exception e) {
+			if (created != null) {
+				try {
+					created.release();
+				} catch (Throwable ignored) {
+				}
+			}
 			this.status = PlaybackStatus.ERROR;
 			this.errorDetail = "could not create media player";
 			PixelReel.LOGGER.error("Failed to create a media player for {}", ChannelService.hostOnly(this.url), e);

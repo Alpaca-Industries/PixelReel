@@ -67,6 +67,8 @@ public class DisplayBlockEntity extends BlockEntity {
 
 	public static final int MAX_STREAM_URL = 2048;
 	public static final int MAX_OVERVIEW = 1024;
+	private static final long MEDIA_ENDED_REPORT_COOLDOWN_MILLIS = 3000L;
+	private static final long MAX_PLAYBACK_POSITION_MS = 24L * 60 * 60 * 1000;
 
 	private boolean powered;
 	private boolean suspended;
@@ -76,6 +78,7 @@ public class DisplayBlockEntity extends BlockEntity {
 	private String streamUrl = "";
 	private float volume;
 	private int channelEpoch;
+	private long lastMediaEndedReportAt;
 	private int ticksAlive;
 	private boolean panelsValidated;
 	private @Nullable String lastPlaybackProblem;
@@ -160,6 +163,16 @@ public class DisplayBlockEntity extends BlockEntity {
 
 	public int getChannelEpoch() {
 		return this.channelEpoch;
+	}
+
+	/** debounces ReportMediaEnded, which any nearby viewer may send, so it can't be spammed to repeatedly force-stop/skip. */
+	public boolean tryConsumeMediaEndedReport() {
+		long now = System.currentTimeMillis();
+		if (now - this.lastMediaEndedReportAt < MEDIA_ENDED_REPORT_COOLDOWN_MILLIS) {
+			return false;
+		}
+		this.lastMediaEndedReportAt = now;
+		return true;
 	}
 
 	public MediaSource getMediaSource() {
@@ -325,7 +338,7 @@ public class DisplayBlockEntity extends BlockEntity {
 		if (this.playbackDurationMs > 0L) {
 			return Math.min(this.playbackDurationMs, Math.max(0L, positionMs));
 		}
-		return Math.max(0L, positionMs);
+		return Math.min(MAX_PLAYBACK_POSITION_MS, Math.max(0L, positionMs));
 	}
 
 	public Vec3 screenCentre() {

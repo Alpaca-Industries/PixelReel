@@ -40,6 +40,10 @@ public final class PixelReelConfig {
 
 	public boolean onDemandAutoplayNextEpisode = true;
 
+	public boolean relayEnabled = true;
+	public int relayPort = 28805;
+	public String relayPublicHost = "";
+
 	public String permissionBrowse = "everyone";
 	public String permissionPlayTunarr = "everyone";
 	public String permissionPlayJellyfinMovies = "everyone";
@@ -107,6 +111,9 @@ public final class PixelReelConfig {
 			: new ArrayList<>(this.plexLibraryKeys.stream().filter(id -> id != null && !id.isBlank()).map(String::trim).toList());
 		copy.plexLibraryCacheSeconds = clamp(this.plexLibraryCacheSeconds, 30, 86400, 600);
 		copy.onDemandAutoplayNextEpisode = this.onDemandAutoplayNextEpisode || this.jellyfinAutoplayNextEpisode;
+		copy.relayEnabled = this.relayEnabled;
+		copy.relayPort = clamp(this.relayPort, 1024, 65535, 28805);
+		copy.relayPublicHost = this.relayPublicHost == null ? "" : this.relayPublicHost.trim();
 		copy.permissionBrowse = normalizePermission(this.permissionBrowse, "everyone");
 		copy.permissionPlayTunarr = normalizePermission(this.permissionPlayTunarr, "everyone");
 		copy.permissionPlayJellyfinMovies = normalizePermission(this.permissionPlayJellyfinMovies, "everyone");

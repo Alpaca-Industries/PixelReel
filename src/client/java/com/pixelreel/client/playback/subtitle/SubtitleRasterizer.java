@@ -1,5 +1,6 @@
 package com.pixelreel.client.playback.subtitle;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -9,8 +10,16 @@ import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import org.lwjgl.system.MemoryUtil;
 
-/** burns subtitle. */
+/**
+ * burns subtitle. Callers must serialize calls externally (e.g. VideoTexture.lock) —
+ * the scratch buffers below are reused across calls and are not themselves thread-safe.
+ */
 public final class SubtitleRasterizer {
+	private static BufferedImage scratchImage;
+	private static int scratchWidth;
+	private static int scratchHeight;
+	private static int[] scratchPixels = new int[0];
+
 	private SubtitleRasterizer() {
 	}
 
@@ -24,9 +33,12 @@ public final class SubtitleRasterizer {
 		}
 		try {
 			int fontSize = Math.max(16, Math.min(48, height / 14));
-			BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+			BufferedImage image = scratchImageFor(width, height);
 			Graphics2D g = image.createGraphics();
 			try {
+				g.setComposite(AlphaComposite.getInstance(AlphaComposite.CLEAR, 0.0F));
+				g.fillRect(0, 0, width, height);
+				g.setComposite(AlphaComposite.SrcOver);
 				g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 				g.setFont(new Font("SansSerif", Font.BOLD, fontSize));
 				FontMetrics metrics = g.getFontMetrics();
@@ -54,7 +66,7 @@ public final class SubtitleRasterizer {
 				g.dispose();
 			}
 			long base = MemoryUtil.memAddress(rgba);
-			int[] pixels = new int[width];
+			int[] pixels = scratchPixels;
 			for (int row = Math.max(0, height - blockBottom(height, fontSize, text)); row < height; row++) {
 				image.getRGB(0, row, width, 1, pixels, 0, width);
 				boolean any = false;
@@ -94,6 +106,16 @@ public final class SubtitleRasterizer {
 		} catch (Throwable ignored) {
 			// i know i know left this catch empty leaving this empty so it doesnt break the video 
 		}
+	}
+
+	private static BufferedImage scratchImageFor(int width, int height) {
+		if (scratchImage == null || scratchWidth != width || scratchHeight != height) {
+			scratchImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+			scratchWidth = width;
+			scratchHeight = height;
+			scratchPixels = new int[width];
+		}
+		return scratchImage;
 	}
 
 	private static int blockBottom(int height, int fontSize, String text) {

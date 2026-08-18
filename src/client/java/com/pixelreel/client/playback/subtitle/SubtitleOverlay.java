@@ -18,6 +18,7 @@ public final class SubtitleOverlay {
 		.connectTimeout(Duration.ofSeconds(10))
 		.followRedirects(HttpClient.Redirect.NORMAL)
 		.build();
+	private static final long MAX_SUBTITLE_BYTES = 5 * 1024 * 1024;
 
 	private final AtomicReference<List<SubtitleParser.Cue>> cues = new AtomicReference<>(List.of());
 	private volatile String loadedUrl = "";
@@ -72,15 +73,20 @@ public final class SubtitleOverlay {
 				.header("Accept", "text/vtt, text/plain, */*")
 				.GET()
 				.build();
-			HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
 			if (response.statusCode() / 100 != 2) {
 				PixelReel.LOGGER.warn("Subtitle download failed HTTP {} for {}", response.statusCode(), sanitize(url));
+				return;
+			}
+			byte[] body = response.body();
+			if (body.length > MAX_SUBTITLE_BYTES) {
+				PixelReel.LOGGER.warn("Subtitle download too large ({} bytes) for {}", body.length, sanitize(url));
 				return;
 			}
 			if (!url.equals(this.loadedUrl)) {
 				return;
 			}
-			List<SubtitleParser.Cue> parsed = SubtitleParser.parse(response.body());
+			List<SubtitleParser.Cue> parsed = SubtitleParser.parse(new String(body, StandardCharsets.UTF_8));
 			this.cues.set(parsed);
 			PixelReel.LOGGER.info("Loaded {} subtitle cue(s) from {}", parsed.size(), sanitize(url));
 		} catch (Exception e) {

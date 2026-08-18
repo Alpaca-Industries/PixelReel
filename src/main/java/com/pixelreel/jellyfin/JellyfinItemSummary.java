@@ -93,6 +93,30 @@ public record JellyfinItemSummary(
 		);
 	}
 
+	public JellyfinItemSummary withImageUrl(String newImageUrl) {
+		if (newImageUrl.equals(this.imageUrl)) {
+			return this;
+		}
+		return new JellyfinItemSummary(
+			this.id,
+			this.kind,
+			this.title,
+			this.overview,
+			this.productionYear,
+			this.runtimeTicks,
+			newImageUrl,
+			this.playbackPositionTicks,
+			this.runTimeTicks,
+			this.played,
+			this.childCount,
+			this.indexNumber,
+			this.parentIndexNumber,
+			this.seriesName,
+			this.seriesId,
+			this.seasonId
+		);
+	}
+
 	public boolean hasResume() {
 		return this.playbackPositionTicks > 0L && !this.played;
 	}

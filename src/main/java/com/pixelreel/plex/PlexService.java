@@ -6,106 +6,43 @@ import com.pixelreel.config.PixelReelConfig;
 import com.pixelreel.jellyfin.JellyfinItemSummary;
 import com.pixelreel.jellyfin.JellyfinLibrary;
 import com.pixelreel.jellyfin.JellyfinStatus;
+import com.pixelreel.provider.AbstractCatalogService;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-import org.jspecify.annotations.Nullable;
 
 /** server-side Plex cache */
-public final class PlexService {
+public final class PlexService extends AbstractCatalogService {
 	public static final PlexService INSTANCE = new PlexService();
-	public static final int PAGE_SIZE = 48;
-
-	private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
-		Thread thread = new Thread(runnable, "pixelreel-plex");
-		thread.setDaemon(true);
-		return thread;
-	});
-
-	private volatile JellyfinStatus lastStatus = JellyfinStatus.notConfigured();
-	private volatile List<JellyfinLibrary> libraries = List.of();
-	private volatile List<JellyfinItemSummary> movies = List.of();
-	private volatile List<JellyfinItemSummary> series = List.of();
-	private volatile Map<String, List<JellyfinItemSummary>> seasonsBySeries = Map.of();
-	private volatile Map<String, List<JellyfinItemSummary>> episodesBySeason = Map.of();
-	private volatile Map<String, JellyfinItemSummary> itemsById = Map.of();
-	private volatile long cacheFilledAtMillis;
-	private @Nullable CompletableFuture<JellyfinStatus> inFlight;
 
 	private PlexService() {
+		super("pixelreel-plex", PlexClient::createHttpClient);
 	}
 
-	public JellyfinStatus lastStatus() {
-		return this.lastStatus;
+	@Override
+	protected boolean isConfigured(PixelReelConfig config) {
+		return config.isPlexConfigured();
 	}
 
-	public List<JellyfinLibrary> libraries() {
-		return this.libraries;
+	@Override
+	protected boolean isUrlValid(PixelReelConfig config) {
+		return isUrlValid(config.plexUrl);
 	}
 
-	public boolean isCacheFresh() {
-		PixelReelConfig config = ConfigManager.get();
-		return this.lastStatus.authenticated()
-			&& System.currentTimeMillis() - this.cacheFilledAtMillis < config.plexLibraryCacheSeconds * 1000L;
+	@Override
+	protected long cacheSeconds(PixelReelConfig config) {
+		return config.plexLibraryCacheSeconds;
 	}
 
-	public void invalidateCache() {
-		this.cacheFilledAtMillis = 0L;
+	@Override
+	protected String providerLabel() {
+		return "Plex";
 	}
 
-	public synchronized CompletableFuture<JellyfinStatus> refresh(boolean force) {
-		PixelReelConfig config = ConfigManager.get();
-		if (!config.isPlexConfigured()) {
-			this.lastStatus = JellyfinStatus.notConfigured();
-			this.clearCatalogue();
-			return CompletableFuture.completedFuture(this.lastStatus);
-		}
-		if (!isUrlValid(config.plexUrl)) {
-			this.lastStatus = JellyfinStatus.offline("Invalid Plex URL");
-			return CompletableFuture.completedFuture(this.lastStatus);
-		}
-		if (!force && this.isCacheFresh()) {
-			return CompletableFuture.completedFuture(this.lastStatus);
-		}
-		if (this.inFlight != null && !this.inFlight.isDone()) {
-			return this.inFlight;
-		}
-		CompletableFuture<JellyfinStatus> future = CompletableFuture.supplyAsync(() -> this.scanBlocking(config), this.executor);
-		this.inFlight = future;
-		return future;
-	}
-
-	public List<JellyfinItemSummary> movies(@Nullable String search) {
-		return filter(this.movies, search);
-	}
-
-	public List<JellyfinItemSummary> series(@Nullable String search) {
-		return filter(this.series, search);
-	}
-
-	public Page pageMovies(String search, int page) {
-		return pageOf(this.movies(search), page);
-	}
-
-	public Page pageSeries(String search, int page) {
-		return pageOf(this.series(search), page);
-	}
-
-	public Optional<JellyfinItemSummary> find(String itemId) {
-		if (itemId == null || itemId.isBlank()) {
-			return Optional.empty();
-		}
-		return Optional.ofNullable(this.itemsById.get(itemId));
-	}
-
+	@Override
 	public CompletableFuture<Optional<JellyfinItemSummary>> fetchItem(String itemId) {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
@@ -115,18 +52,17 @@ public final class PlexService {
 				}
 				JellyfinItemSummary item = this.client(config).getItem(itemId);
 				if (item != null) {
-					Map<String, JellyfinItemSummary> copy = new LinkedHashMap<>(this.itemsById);
-					copy.put(item.id(), item);
-					this.itemsById = Map.copyOf(copy);
+					this.indexSingleItem(item);
 				}
 				return Optional.ofNullable(item);
 			} catch (Exception e) {
-				PixelReel.LOGGER.warn("Failed to fetch Plex item {}: {}", itemId, PlexClient.describeError(e));
+				PixelReel.LOGGER.warn("Failed to fetch Plex item {}: {}", itemId, PlexClient.sanitizeDetail(PlexClient.describeError(e)));
 				return Optional.empty();
 			}
 		}, this.executor);
 	}
 
+	@Override
 	public CompletableFuture<List<JellyfinItemSummary>> seasons(String seriesId, boolean force) {
 		List<JellyfinItemSummary> cached = this.seasonsBySeries.getOrDefault(seriesId, List.of());
 		if (!force && !cached.isEmpty()) {
@@ -136,19 +72,17 @@ public final class PlexService {
 			try {
 				PixelReelConfig config = ConfigManager.get();
 				List<JellyfinItemSummary> seasons = this.client(config).listChildren(seriesId);
-				seasons.sort(Comparator.comparingInt(JellyfinItemSummary::indexNumber).thenComparing(JellyfinItemSummary::title));
-				Map<String, List<JellyfinItemSummary>> copy = new LinkedHashMap<>(this.seasonsBySeries);
-				copy.put(seriesId, List.copyOf(seasons));
-				this.seasonsBySeries = Map.copyOf(copy);
-				this.index(seasons);
+				sortByIndexThenTitle(seasons);
+				this.storeSeasons(seriesId, seasons);
 				return seasons;
 			} catch (Exception e) {
-				PixelReel.LOGGER.warn("Failed to load Plex seasons for {}: {}", seriesId, PlexClient.describeError(e));
+				PixelReel.LOGGER.warn("Failed to load Plex seasons for {}: {}", seriesId, PlexClient.sanitizeDetail(PlexClient.describeError(e)));
 				return cached;
 			}
 		}, this.executor);
 	}
 
+	@Override
 	public CompletableFuture<List<JellyfinItemSummary>> episodes(String seasonId, boolean force) {
 		List<JellyfinItemSummary> cached = this.episodesBySeason.getOrDefault(seasonId, List.of());
 		if (!force && !cached.isEmpty()) {
@@ -158,14 +92,11 @@ public final class PlexService {
 			try {
 				PixelReelConfig config = ConfigManager.get();
 				List<JellyfinItemSummary> episodes = this.client(config).listChildren(seasonId);
-				episodes.sort(Comparator.comparingInt(JellyfinItemSummary::indexNumber).thenComparing(JellyfinItemSummary::title));
-				Map<String, List<JellyfinItemSummary>> copy = new LinkedHashMap<>(this.episodesBySeason);
-				copy.put(seasonId, List.copyOf(episodes));
-				this.episodesBySeason = Map.copyOf(copy);
-				this.index(episodes);
+				sortByIndexThenTitle(episodes);
+				this.storeEpisodes(seasonId, episodes);
 				return episodes;
 			} catch (Exception e) {
-				PixelReel.LOGGER.warn("Failed to load Plex episodes for {}: {}", seasonId, PlexClient.describeError(e));
+				PixelReel.LOGGER.warn("Failed to load Plex episodes for {}: {}", seasonId, PlexClient.sanitizeDetail(PlexClient.describeError(e)));
 				return cached;
 			}
 		}, this.executor);
@@ -180,7 +111,7 @@ public final class PlexService {
 				}
 				return Optional.of(this.client(config).startPlayback(itemId, startPositionMs));
 			} catch (Exception e) {
-				PixelReel.LOGGER.warn("Failed to resolve Plex playback for {}: {}", itemId, PlexClient.describeError(e));
+				PixelReel.LOGGER.warn("Failed to resolve Plex playback for {}: {}", itemId, PlexClient.sanitizeDetail(PlexClient.describeError(e)));
 				return Optional.empty();
 			}
 		}, this.executor);
@@ -212,60 +143,6 @@ public final class PlexService {
 		return this.client(config).buildSubtitleUrl(subtitleStreamId);
 	}
 
-	public Optional<JellyfinItemSummary> findNextEpisode(String seriesId, String seasonId, int episodeNumber) {
-		List<JellyfinItemSummary> episodes = this.episodesBySeason.getOrDefault(seasonId, List.of());
-		for (JellyfinItemSummary episode : episodes) {
-			if (episode.indexNumber() > episodeNumber) {
-				return Optional.of(episode);
-			}
-		}
-		List<JellyfinItemSummary> seasons = this.seasonsBySeries.getOrDefault(seriesId, List.of());
-		int currentSeasonIndex = -1;
-		for (int i = 0; i < seasons.size(); i++) {
-			if (seasons.get(i).id().equals(seasonId)) {
-				currentSeasonIndex = i;
-				break;
-			}
-		}
-		if (currentSeasonIndex < 0) {
-			return Optional.empty();
-		}
-		for (int i = currentSeasonIndex + 1; i < seasons.size(); i++) {
-			JellyfinItemSummary nextSeason = seasons.get(i);
-			List<JellyfinItemSummary> nextEpisodes = this.episodesBySeason.getOrDefault(nextSeason.id(), List.of());
-			if (!nextEpisodes.isEmpty()) {
-				return Optional.of(nextEpisodes.getFirst());
-			}
-		}
-		return Optional.empty();
-	}
-
-	public CompletableFuture<Optional<JellyfinItemSummary>> resolveNextEpisode(String seriesId, String seasonId, int episodeNumber) {
-		return this.seasons(seriesId, false).thenCompose(seasons -> {
-			Optional<JellyfinItemSummary> local = this.findNextEpisode(seriesId, seasonId, episodeNumber);
-			if (local.isPresent()) {
-				return CompletableFuture.completedFuture(local);
-			}
-			List<CompletableFuture<List<JellyfinItemSummary>>> loads = new ArrayList<>();
-			boolean passedCurrent = false;
-			for (JellyfinItemSummary season : seasons) {
-				if (season.id().equals(seasonId)) {
-					passedCurrent = true;
-					loads.add(this.episodes(season.id(), false));
-					continue;
-				}
-				if (passedCurrent) {
-					loads.add(this.episodes(season.id(), false));
-				}
-			}
-			if (loads.isEmpty()) {
-				return CompletableFuture.completedFuture(Optional.empty());
-			}
-			return CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new))
-				.thenApply(v -> this.findNextEpisode(seriesId, seasonId, episodeNumber));
-		});
-	}
-
 	public void reportTimeline(String itemId, String state, long positionMs, long durationMs) {
 		this.executor.execute(() -> {
 			try {
@@ -280,6 +157,7 @@ public final class PlexService {
 		});
 	}
 
+	@Override
 	public CompletableFuture<List<JellyfinLibrary>> discoverLibraries() {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
@@ -288,31 +166,35 @@ public final class PlexService {
 					return List.<JellyfinLibrary>of();
 				}
 				List<JellyfinLibrary> discovered = this.client(config).listLibraries();
-				this.libraries = List.copyOf(discovered);
+				this.setLibraries(discovered);
 				return discovered;
 			} catch (Exception e) {
-				PixelReel.LOGGER.warn("Failed to list Plex libraries: {}", PlexClient.describeError(e));
-				this.lastStatus = e instanceof PlexClient.PlexAuthException
-					? JellyfinStatus.authFailed(PlexClient.sanitizeDetail(PlexClient.describeError(e)))
-					: JellyfinStatus.offline(PlexClient.sanitizeDetail(PlexClient.describeError(e)));
+				PixelReel.LOGGER.warn("Failed to list Plex libraries: {}", PlexClient.sanitizeDetail(PlexClient.describeError(e)));
+				this.setStatus(
+					e instanceof PlexClient.PlexAuthException
+						? JellyfinStatus.authFailed(PlexClient.sanitizeDetail(PlexClient.describeError(e)))
+						: JellyfinStatus.offline(PlexClient.sanitizeDetail(PlexClient.describeError(e)))
+				);
 				return List.<JellyfinLibrary>of();
 			}
 		}, this.executor);
 	}
 
-	private JellyfinStatus scanBlocking(PixelReelConfig config) {
+	@Override
+	protected JellyfinStatus scanBlocking(PixelReelConfig config) {
 		try {
 			PlexClient client = this.client(config);
 			client.ping();
 			List<JellyfinLibrary> discovered = client.listLibraries();
-			this.libraries = List.copyOf(discovered);
+			this.setLibraries(discovered);
 
 			List<JellyfinLibrary> enabled = enabledLibraries(discovered, config);
 			if (enabled.isEmpty()) {
 				this.clearCatalogue();
-				this.lastStatus = JellyfinStatus.online(0, 0, "No permitted libraries are available");
-				this.cacheFilledAtMillis = System.currentTimeMillis();
-				return this.lastStatus;
+				JellyfinStatus status = JellyfinStatus.online(0, 0, "No permitted libraries are available");
+				this.setStatus(status);
+				this.markCacheFilled();
+				return status;
 			}
 
 			List<JellyfinItemSummary> movieItems = new ArrayList<>();
@@ -325,39 +207,31 @@ public final class PlexService {
 					seriesItems.addAll(client.listSectionItems(library.id(), "show"));
 				}
 			}
-			movieItems.sort(Comparator.comparing(JellyfinItemSummary::title, String.CASE_INSENSITIVE_ORDER));
-			seriesItems.sort(Comparator.comparing(JellyfinItemSummary::title, String.CASE_INSENSITIVE_ORDER));
+			sortByTitle(movieItems);
+			sortByTitle(seriesItems);
 
-			this.movies = List.copyOf(movieItems);
-			this.series = List.copyOf(seriesItems);
-			this.seasonsBySeries = Map.of();
-			this.episodesBySeason = Map.of();
-			Map<String, JellyfinItemSummary> index = new LinkedHashMap<>();
-			for (JellyfinItemSummary item : movieItems) {
-				index.put(item.id(), item);
-			}
-			for (JellyfinItemSummary item : seriesItems) {
-				index.put(item.id(), item);
-			}
-			this.itemsById = Map.copyOf(index);
-			this.cacheFilledAtMillis = System.currentTimeMillis();
-			this.lastStatus = JellyfinStatus.online(movieItems.size(), seriesItems.size(), "Libraries ready");
+			this.setCatalogue(movieItems, seriesItems);
+			this.markCacheFilled();
+			JellyfinStatus status = JellyfinStatus.online(movieItems.size(), seriesItems.size(), "Libraries ready");
+			this.setStatus(status);
 			PixelReel.LOGGER.info(
 				"Plex library ready: {} movie(s), {} series from {} library(ies)",
 				movieItems.size(),
 				seriesItems.size(),
 				enabled.size()
 			);
-			return this.lastStatus;
+			return status;
 		} catch (PlexClient.PlexAuthException e) {
-			this.lastStatus = JellyfinStatus.authFailed(PlexClient.sanitizeDetail(e.getMessage()));
+			JellyfinStatus status = JellyfinStatus.authFailed(PlexClient.sanitizeDetail(e.getMessage()));
+			this.setStatus(status);
 			PixelReel.LOGGER.warn("Plex authentication failed: {}", PlexClient.sanitizeDetail(e.getMessage()));
-			return this.lastStatus;
+			return status;
 		} catch (Exception e) {
 			String detail = PlexClient.sanitizeDetail(PlexClient.describeError(e));
-			this.lastStatus = JellyfinStatus.offline(detail);
+			JellyfinStatus status = JellyfinStatus.offline(detail);
+			this.setStatus(status);
 			PixelReel.LOGGER.warn("Plex scan failed: {}", detail);
-			return this.lastStatus;
+			return status;
 		}
 	}
 
@@ -377,24 +251,8 @@ public final class PlexService {
 			.collect(Collectors.toList());
 	}
 
-	private void clearCatalogue() {
-		this.movies = List.of();
-		this.series = List.of();
-		this.seasonsBySeries = Map.of();
-		this.episodesBySeason = Map.of();
-		this.itemsById = Map.of();
-	}
-
-	private void index(List<JellyfinItemSummary> items) {
-		Map<String, JellyfinItemSummary> copy = new LinkedHashMap<>(this.itemsById);
-		for (JellyfinItemSummary item : items) {
-			copy.put(item.id(), item);
-		}
-		this.itemsById = Map.copyOf(copy);
-	}
-
 	private PlexClient client(PixelReelConfig config) {
-		return new PlexClient(PlexClient.createHttpClient(config, this.executor), config);
+		return new PlexClient(this.httpClient(config), config);
 	}
 
 	private static boolean isUrlValid(String url) {
@@ -403,39 +261,5 @@ public final class PlexService {
 		}
 		String lower = url.trim().toLowerCase(Locale.ROOT);
 		return lower.startsWith("http://") || lower.startsWith("https://");
-	}
-
-	private static List<JellyfinItemSummary> filter(List<JellyfinItemSummary> source, @Nullable String search) {
-		if (search == null || search.isBlank()) {
-			return source;
-		}
-		String q = search.trim().toLowerCase(Locale.ROOT);
-		List<JellyfinItemSummary> filtered = new ArrayList<>();
-		for (JellyfinItemSummary item : itemsOrEmpty(source)) {
-			if (item.title().toLowerCase(Locale.ROOT).contains(q) || item.seriesName().toLowerCase(Locale.ROOT).contains(q)) {
-				filtered.add(item);
-			}
-		}
-		return filtered;
-	}
-
-	private static List<JellyfinItemSummary> itemsOrEmpty(List<JellyfinItemSummary> source) {
-		return source == null ? List.of() : source;
-	}
-
-	private static Page pageOf(List<JellyfinItemSummary> items, int page) {
-		int safePage = Math.max(0, page);
-		int from = safePage * PAGE_SIZE;
-		if (from >= items.size()) {
-			return new Page(List.of(), safePage, items.size());
-		}
-		int to = Math.min(items.size(), from + PAGE_SIZE);
-		return new Page(items.subList(from, to), safePage, items.size());
-	}
-
-	public record Page(List<JellyfinItemSummary> items, int page, int totalCount) {
-		public int totalPages() {
-			return this.totalCount == 0 ? 0 : (this.totalCount + PAGE_SIZE - 1) / PAGE_SIZE;
-		}
 	}
 }

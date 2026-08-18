@@ -132,6 +132,15 @@ public final class TvCommand {
 
 	private static int channel(CommandContext<CommandSourceStack> context) {
 		CommandSourceStack source = context.getSource();
+		ServerPlayer player = source.getPlayer();
+		if (player == null) {
+			source.sendFailure(Component.translatable("command.pixelreel.players_only"));
+			return 0;
+		}
+		if (!CinemaPermissions.canPlayTunarr(player)) {
+			source.sendFailure(Component.translatable("command.pixelreel.no_permission"));
+			return 0;
+		}
 		String query = StringArgumentType.getString(context, "channel").trim();
 		DisplayBlockEntity display = lookedAtDisplay(source);
 		if (display == null) {
@@ -174,6 +183,15 @@ public final class TvCommand {
 
 	private static int control(CommandContext<CommandSourceStack> context, ScreenAction action) {
 		CommandSourceStack source = context.getSource();
+		ServerPlayer player = source.getPlayer();
+		if (player == null) {
+			source.sendFailure(Component.translatable("command.pixelreel.players_only"));
+			return 0;
+		}
+		if (!CinemaPermissions.mayControl(player, action)) {
+			source.sendFailure(Component.translatable("command.pixelreel.no_permission"));
+			return 0;
+		}
 		DisplayBlockEntity display = lookedAtDisplay(source);
 		if (display == null) {
 			source.sendFailure(Component.translatable("command.pixelreel.no_screen_in_sight"));
@@ -205,6 +223,15 @@ public final class TvCommand {
 
 	private static int volume(CommandContext<CommandSourceStack> context) {
 		CommandSourceStack source = context.getSource();
+		ServerPlayer player = source.getPlayer();
+		if (player == null) {
+			source.sendFailure(Component.translatable("command.pixelreel.players_only"));
+			return 0;
+		}
+		if (!CinemaPermissions.mayControl(player, ScreenAction.VOLUME_SET)) {
+			source.sendFailure(Component.translatable("command.pixelreel.no_permission"));
+			return 0;
+		}
 		int percent = IntegerArgumentType.getInteger(context, "percent");
 		DisplayBlockEntity display = lookedAtDisplay(source);
 		if (display == null) {
@@ -414,6 +441,15 @@ public final class TvCommand {
 
 	private static int rebuild(CommandContext<CommandSourceStack> context) {
 		CommandSourceStack source = context.getSource();
+		ServerPlayer player = source.getPlayer();
+		if (player == null) {
+			source.sendFailure(Component.translatable("command.pixelreel.players_only"));
+			return 0;
+		}
+		if (!CinemaPermissions.canControlPlayback(player)) {
+			source.sendFailure(Component.translatable("command.pixelreel.no_permission"));
+			return 0;
+		}
 		DisplayBlockEntity display = lookedAtDisplay(source);
 		if (display == null) {
 			source.sendFailure(Component.translatable("command.pixelreel.no_screen_in_sight"));

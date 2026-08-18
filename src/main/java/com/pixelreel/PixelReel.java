@@ -10,6 +10,7 @@ import com.pixelreel.registry.ModBlockEntities;
 import com.pixelreel.registry.ModBlocks;
 import com.pixelreel.registry.ModCreativeTabs;
 import com.pixelreel.registry.ModItems;
+import com.pixelreel.relay.StreamRelay;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
@@ -34,10 +35,12 @@ public class PixelReel implements ModInitializer {
 			LOGGER.info("pixelReel configuration file: {}", ConfigManager.path());
 			ChannelService.INSTANCE.channels(false);
 			OnDemandCatalog.refreshConfigured(false);
+			StreamRelay.INSTANCE.start();
 		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			ChannelService.INSTANCE.invalidateCache();
 			OnDemandCatalog.invalidateAll();
+			StreamRelay.INSTANCE.stop();
 		});
 		LOGGER.info("pixelReel initialised");
 	}
